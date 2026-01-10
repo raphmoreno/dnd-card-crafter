@@ -23,11 +23,11 @@ export const PrintPreview = forwardRef<HTMLDivElement, PrintPreviewProps>(
         {pages.map((pageMonsters, pageIndex) => (
           <div
             key={pageIndex}
-            className="bg-white flex items-center justify-center gap-2"
+            className="bg-white flex items-center justify-center gap-1"
             style={{
               width: "297mm",  // A4 landscape width
               height: "210mm", // A4 landscape height
-              padding: "8mm",
+              padding: "2mm",
               pageBreakAfter: pageIndex < pages.length - 1 ? "always" : "auto",
             }}
           >
@@ -40,7 +40,7 @@ export const PrintPreview = forwardRef<HTMLDivElement, PrintPreviewProps>(
               <div
                 key={`empty-${i}`}
                 className="border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center"
-                style={{ width: "47mm", height: "140mm" }}
+                style={{ width: "72mm", height: "200mm" }}
               >
                 <span className="text-gray-300 text-xs">Empty</span>
               </div>
