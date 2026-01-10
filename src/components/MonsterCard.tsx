@@ -7,11 +7,11 @@ interface MonsterCardProps {
 }
 
 export function MonsterCard({ monster, forPrint = false }: MonsterCardProps) {
-  // For print: width ~47mm (fits 4 on A4 landscape with margins), height ~140mm (1:3 aspect for fold)
+  // For print: width ~72mm (fits 4 on A4 landscape 297mm with minimal gaps), height ~200mm (fills A4 height 210mm)
   // For preview: scaled down version
   const cardStyle = forPrint 
-    ? { width: "47mm", height: "140mm" }
-    : { width: "120px", height: "360px" };
+    ? { width: "72mm", height: "200mm" }
+    : { width: "100px", height: "280px" };
 
   return (
     <div 
