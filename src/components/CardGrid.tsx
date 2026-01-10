@@ -19,7 +19,7 @@ export function CardGrid({ monsters, onRemoveMonster }: CardGridProps) {
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 justify-items-center">
+    <div className="flex flex-wrap gap-4 justify-center">
       {monsters.map((monster) => (
         <div key={monster.slug} className="relative group">
           <Button

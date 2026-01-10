@@ -24,14 +24,14 @@ export function PDFGenerator({ monsters }: PDFGeneratorProps) {
     setIsGenerating(true);
 
     try {
+      // A4 landscape dimensions
       const pdf = new jsPDF({
-        orientation: "portrait",
+        orientation: "landscape",
         unit: "mm",
         format: "a4",
       });
 
-      const pages = printRef.current.querySelectorAll('[style*="pageBreakAfter"], [style*="page-break-after"]');
-      const pageElements = pages.length > 0 ? Array.from(pages) : [printRef.current.firstElementChild];
+      const pageElements = printRef.current.children;
 
       for (let i = 0; i < pageElements.length; i++) {
         const pageElement = pageElements[i] as HTMLElement;
@@ -39,15 +39,16 @@ export function PDFGenerator({ monsters }: PDFGeneratorProps) {
         if (!pageElement) continue;
 
         const canvas = await html2canvas(pageElement, {
-          scale: 2,
+          scale: 3,
           useCORS: true,
           backgroundColor: "#ffffff",
           logging: false,
         });
 
         const imgData = canvas.toDataURL("image/png");
-        const imgWidth = 210;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        // A4 landscape: 297mm x 210mm
+        const imgWidth = 297;
+        const imgHeight = 210;
 
         if (i > 0) {
           pdf.addPage();
@@ -57,7 +58,7 @@ export function PDFGenerator({ monsters }: PDFGeneratorProps) {
       }
 
       pdf.save("dnd-monster-cards.pdf");
-      toast.success("PDF generated successfully!");
+      toast.success("PDF generated successfully! Print and fold cards horizontally.");
     } catch (error) {
       console.error("Error generating PDF:", error);
       toast.error("Failed to generate PDF. Please try again.");
@@ -73,7 +74,10 @@ export function PDFGenerator({ monsters }: PDFGeneratorProps) {
           <h2 className="font-display text-xl text-foreground">Print Preview</h2>
           <p className="text-sm text-muted-foreground">
             {monsters.length} card{monsters.length !== 1 ? "s" : ""} • 
-            {Math.ceil(monsters.length / 4)} page{Math.ceil(monsters.length / 4) !== 1 ? "s" : ""}
+            {Math.ceil(monsters.length / 4)} page{Math.ceil(monsters.length / 4) !== 1 ? "s" : ""} (A4 Landscape)
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Fold each card horizontally in the middle to create tent cards
           </p>
         </div>
         <Button
@@ -100,9 +104,16 @@ export function PDFGenerator({ monsters }: PDFGeneratorProps) {
         <PrintPreview ref={printRef} monsters={monsters} />
       </div>
 
-      {/* Visible preview */}
-      <div className="border border-border rounded-lg overflow-auto max-h-[600px] bg-secondary/30">
-        <div className="transform scale-50 origin-top-left" style={{ width: "200%" }}>
+      {/* Visible preview - scaled down */}
+      <div className="border border-border rounded-lg overflow-auto max-h-[500px] bg-secondary/30 p-4">
+        <div 
+          className="origin-top-left"
+          style={{ 
+            transform: "scale(0.35)",
+            transformOrigin: "top left",
+            width: "297mm",
+          }}
+        >
           <PrintPreview monsters={monsters} />
         </div>
       </div>
