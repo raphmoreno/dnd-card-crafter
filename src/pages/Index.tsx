@@ -9,10 +9,13 @@ import { Scroll, Sword } from "lucide-react";
 const Index = () => {
   const [selectedMonsters, setSelectedMonsters] = useState<Monster[]>([]);
 
-  const handleAddMonster = (monster: Monster) => {
-    if (!selectedMonsters.some((m) => m.slug === monster.slug)) {
-      setSelectedMonsters((prev) => [...prev, monster]);
+  const handleAddMonster = (monster: Monster, quantity: number = 1) => {
+    // Add the monster the specified number of times
+    const newMonsters: Monster[] = [];
+    for (let i = 0; i < quantity; i++) {
+      newMonsters.push(monster);
     }
+    setSelectedMonsters((prev) => [...prev, ...newMonsters]);
   };
 
   const handleRemoveMonster = (slug: string) => {

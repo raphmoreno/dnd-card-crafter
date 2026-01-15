@@ -11,6 +11,11 @@ node_modules
 dist
 dist-ssr
 *.local
+public/images/monsters/*
+
+# Environment variables
+.env
+.env.local
 
 # Editor directories and files
 .vscode/*

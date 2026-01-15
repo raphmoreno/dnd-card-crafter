@@ -32,8 +32,21 @@ cd <YOUR_PROJECT_NAME>
 # Step 3: Install the necessary dependencies.
 npm i
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Step 4: Set up environment variables for OpenAI image generation (optional)
+# Create a .env file in the project root with:
+# OPENAI_API_KEY=your_openai_api_key_here
+# API_PORT=3001
+
+# Step 5: Start the development servers
+# Option A: Start both frontend and API server together
+npm run dev:all
+
+# Option B: Start them separately (in two terminals)
+# Terminal 1: Frontend
 npm run dev
+
+# Terminal 2: API server (required for OpenAI image generation)
+npm run dev:api
 ```
 
 **Edit a file directly in GitHub**
@@ -59,6 +72,27 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Express (API server for OpenAI image generation)
+- OpenAI DALL-E 3 (for generating monster images)
+
+## Features
+
+- **Monster Card Generator**: Create printable D&D monster cards from the Open5e API
+- **Monster Image Integration**: Automatically includes official Monster Manual artwork when available
+- **AI Image Generation**: Generates missing monster images using OpenAI DALL-E 3 when not found in the database
+- **Print Preview**: Preview cards before printing with proper A4 landscape layout
+- **PDF Export**: Export cards as PDF for easy printing
+
+## Image Sources
+
+Monster images are sourced from:
+1. **Scraped from Forgotten Realms Wiki**: Official Monster Manual 5e images (289 monsters)
+2. **OpenAI DALL-E 3**: Generated images for monsters not found in the database
+
+To update the image database, run:
+```sh
+npm run scrape-images
+```
 
 ## How can I deploy this project?
 
