@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { trackEvent, getAnalyticsSummary, getEvents } from './analytics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,9 +13,25 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.API_PORT || 3001;
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
-app.use(cors());
+// CORS configuration
+const corsOptions = {
+  origin: NODE_ENV === 'production' 
+    ? process.env.FRONTEND_URL || 'http://localhost:8080'
+    : '*',
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Request logging middleware (production)
+if (NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    next();
+  });
+}
 
 // Serve static files from public directory
 app.use(express.static(join(__dirname, '../public')));
@@ -158,20 +175,87 @@ function saveImageMap(imageMap) {
   }
 }
 
+// Generate enhanced description for image generation
+function buildImageDescription(monsterData) {
+  const parts = [];
+  
+  // Add name
+  parts.push(monsterData.name);
+  
+  // Add size and type/subtype
+  const typeDesc = [monsterData.size, monsterData.type];
+  if (monsterData.subtype) {
+    typeDesc.push(`(${monsterData.subtype})`);
+  }
+  parts.push(typeDesc.join(' '));
+  
+  // Build a short description from key features
+  const features = [];
+  
+  // Add special abilities that might be visually distinctive
+  if (monsterData.special_abilities && monsterData.special_abilities.length > 0) {
+    const visualAbilities = monsterData.special_abilities
+      .filter(a => a.name && a.desc)
+      .slice(0, 2) // Take first 2 special abilities
+      .map(a => a.name.toLowerCase());
+    if (visualAbilities.length > 0) {
+      features.push(...visualAbilities);
+    }
+  }
+  
+  // Add actions that might be visually distinctive (like breath weapons, etc.)
+  if (monsterData.actions && monsterData.actions.length > 0) {
+    const visualActions = monsterData.actions
+      .filter(a => a.name && a.desc)
+      .slice(0, 2) // Take first 2 actions
+      .map(a => {
+        const name = a.name.toLowerCase();
+        // Extract key visual elements from description
+        if (a.desc.toLowerCase().includes('breath') || a.desc.toLowerCase().includes('fire')) {
+          return 'fire-breathing';
+        }
+        if (a.desc.toLowerCase().includes('wings') || a.desc.toLowerCase().includes('fly')) {
+          return 'winged';
+        }
+        return name;
+      });
+    features.push(...visualActions);
+  }
+  
+  // Build final description
+  let description = parts.join(', ');
+  if (features.length > 0) {
+    // Remove duplicates and join
+    const uniqueFeatures = [...new Set(features)];
+    description += `, ${uniqueFeatures.slice(0, 3).join(', ')}`;
+  }
+  
+  return description;
+}
+
 // Generate image using OpenAI
-async function generateMonsterImage(monsterName) {
+async function generateMonsterImage(monsterName, additionalContext = null) {
   const apiKey = process.env.OPENAI_API_KEY;
   
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY is not set in environment variables');
   }
 
-  // Sanitize the monster name for the prompt
-  const sanitizedName = sanitizeMonsterNameForPrompt(monsterName);
-  console.log(`Original name: "${monsterName}", Sanitized for prompt: "${sanitizedName}"`);
+  // Build the prompt
+  let creatureDescription;
+  if (additionalContext) {
+    // Use enhanced description from context
+    creatureDescription = buildImageDescription(additionalContext);
+    console.log(`Enhanced description: "${creatureDescription}"`);
+  } else {
+    // Fall back to just name
+    const sanitizedName = sanitizeMonsterNameForPrompt(monsterName);
+    creatureDescription = sanitizedName;
+    console.log(`Original name: "${monsterName}", Sanitized for prompt: "${creatureDescription}"`);
+  }
 
   // Prompt optimized for vertical portrait orientation to fit the card's top section
-  const prompt = `Illustration semi‑réaliste d'un ${sanitizedName}, portrait vertical en pied : la créature est entièrement visible de la tête aux pieds, dans une pose dynamique, et remplit la hauteur de l'image. La lumière est douce et elle projette une ombre subtile sur un fond blanc uni. AUCUN texte, AUCUNE palette de couleurs, AUCUNE bordure, logo ou élément graphique supplémentaire : uniquement la créature sur fond blanc. Utiliser des couleurs naturelles et un rendu détaillé, sans décor ni ornement.`;
+  const prompt = `Illustration semi‑réaliste d'un ${creatureDescription}, portrait vertical : la créature est entièrement visible, dans une pose dynamique, et remplit la hauteur de l'image. La lumière est douce et elle projette une ombre subtile sur un fond blanc uni. AUCUN texte, AUCUNE palette de couleurs, AUCUNE bordure, logo ou élément graphique supplémentaire : uniquement la créature sur fond blanc. Utiliser des couleurs naturelles et un rendu détaillé, sans décor ni ornement.`;
 
   try {
     const response = await fetch('https://api.openai.com/v1/images/generations', {
@@ -225,6 +309,60 @@ async function generateMonsterImage(monsterName) {
     throw error;
   }
 }
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: NODE_ENV 
+  });
+});
+
+// Analytics endpoints
+app.post('/api/analytics/track', (req, res) => {
+  try {
+    const { eventType, metadata } = req.body;
+    
+    if (!eventType) {
+      return res.status(400).json({ error: 'eventType is required' });
+    }
+
+    const validEventTypes = ['search', 'monster_added', 'pdf_download', 'image_regeneration'];
+    if (!validEventTypes.includes(eventType)) {
+      return res.status(400).json({ error: `Invalid eventType. Must be one of: ${validEventTypes.join(', ')}` });
+    }
+
+    trackEvent(eventType, metadata || {});
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error tracking event:', error);
+    res.status(500).json({ error: 'Failed to track event' });
+  }
+});
+
+app.get('/api/analytics/summary', (req, res) => {
+  try {
+    const days = parseInt(req.query.days || '30', 10);
+    const summary = getAnalyticsSummary(days);
+    res.json(summary);
+  } catch (error) {
+    console.error('Error getting analytics summary:', error);
+    res.status(500).json({ error: 'Failed to get analytics summary' });
+  }
+});
+
+app.get('/api/analytics/events', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || '100', 10);
+    const eventType = req.query.eventType || null;
+    const events = getEvents(limit, eventType);
+    res.json({ events });
+  } catch (error) {
+    console.error('Error getting events:', error);
+    res.status(500).json({ error: 'Failed to get events' });
+  }
+});
 
 // API endpoint to generate and save monster image
 app.post('/api/generate-monster-image', async (req, res) => {
@@ -340,6 +478,9 @@ app.post('/api/regenerate-monster-image', async (req, res) => {
       return res.status(400).json({ error: 'monsterName is required' });
     }
 
+    // Track regeneration attempt
+    trackEvent('image_regeneration', { monsterName });
+
     const normalizedName = normalizeMonsterName(monsterName);
     
     // Check if there's already a pending regeneration request for this monster
@@ -452,6 +593,217 @@ app.post('/api/save-monster-image', async (req, res) => {
   }
 });
 
+// API endpoint to generate card via AI
+app.post('/api/generate-card', async (req, res) => {
+  try {
+    const { description, cardType } = req.body;
+
+    if (!description || !cardType) {
+      return res.status(400).json({ error: 'description and cardType are required' });
+    }
+
+    if (cardType !== 'monster' && cardType !== 'npc') {
+      return res.status(400).json({ error: 'cardType must be either "monster" or "npc"' });
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'OPENAI_API_KEY is not set in environment variables' });
+    }
+
+    // Create prompt for GPT-4o mini to generate Monster JSON
+    const systemPrompt = cardType === 'monster'
+      ? `You are a D&D 5e expert. Generate a complete monster stat block as JSON based on the user's description. Return ONLY valid JSON matching this exact structure (all fields required):
+{
+  "name": "string",
+  "size": "Tiny|Small|Medium|Large|Huge|Gargantuan",
+  "type": "string (e.g., beast, humanoid, dragon)",
+  "subtype": "string (optional, can be empty)",
+  "alignment": "lawful good|neutral good|chaotic good|lawful neutral|neutral|chaotic neutral|lawful evil|neutral evil|chaotic evil|unaligned",
+  "armor_class": number,
+  "armor_desc": "string (can be empty)",
+  "hit_points": number,
+  "hit_dice": "string (e.g., 5d8+10)",
+  "challenge_rating": "string (e.g., 2, 1/2, 1/4)",
+  "cr": number,
+  "strength": number (1-30),
+  "dexterity": number (1-30),
+  "constitution": number (1-30),
+  "intelligence": number (1-30),
+  "wisdom": number (1-30),
+  "charisma": number (1-30),
+  "speed": {
+    "walk": number (optional),
+    "fly": number (optional),
+    "swim": number (optional),
+    "burrow": number (optional),
+    "climb": number (optional)
+  },
+  "languages": "string",
+  "senses": "string (e.g., darkvision 60 ft., passive Perception 14)",
+  "damage_resistances": "string (can be empty)",
+  "damage_immunities": "string (can be empty)",
+  "damage_vulnerabilities": "string (can be empty)",
+  "condition_immunities": "string (can be empty)",
+  "actions": [
+    {
+      "name": "string",
+      "desc": "string"
+    }
+  ],
+  "special_abilities": [
+    {
+      "name": "string",
+      "desc": "string"
+    }
+  ]
+}
+
+Make it interesting and balanced for the specified CR. Include at least 1-2 actions and 0-2 special abilities.`
+      : `You are a D&D 5e expert. Generate a complete NPC stat block as JSON based on the user's description. NPCs are typically humanoid creatures with class levels or NPC stat blocks. Return ONLY valid JSON matching this exact structure (all fields required):
+{
+  "name": "string",
+  "size": "Tiny|Small|Medium|Large|Huge|Gargantuan (usually Medium for NPCs)",
+  "type": "humanoid",
+  "subtype": "string (race, e.g., human, elf, dragonborn)",
+  "alignment": "lawful good|neutral good|chaotic good|lawful neutral|neutral|chaotic neutral|lawful evil|neutral evil|chaotic evil|unaligned",
+  "armor_class": number,
+  "armor_desc": "string (can be empty)",
+  "hit_points": number,
+  "hit_dice": "string (e.g., 3d8+3 for level 3)",
+  "challenge_rating": "string (e.g., 1, 1/2, based on level)",
+  "cr": number,
+  "strength": number (1-30),
+  "dexterity": number (1-30),
+  "constitution": number (1-30),
+  "intelligence": number (1-30),
+  "wisdom": number (1-30),
+  "charisma": number (1-30),
+  "speed": {
+    "walk": number (usually 30 for humanoids)
+  },
+  "languages": "string",
+  "senses": "string (e.g., passive Perception 12)",
+  "damage_resistances": "string (can be empty)",
+  "damage_immunities": "string (can be empty)",
+  "damage_vulnerabilities": "string (can be empty)",
+  "condition_immunities": "string (can be empty)",
+  "actions": [
+    {
+      "name": "string",
+      "desc": "string"
+    }
+  ],
+  "special_abilities": [
+    {
+      "name": "string",
+      "desc": "string"
+    }
+  ]
+}
+
+Make it appropriate for the described character. Include class features as special abilities if mentioned. Include at least 1-2 actions.`;
+
+    const userPrompt = `Create a ${cardType} stat block for: ${description}`;
+
+    // Call GPT-4o mini to generate the monster JSON
+    console.log(`Generating ${cardType} card for: ${description}`);
+    const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+      }),
+    });
+
+    if (!chatResponse.ok) {
+      const error = await chatResponse.json();
+      throw new Error(error.error?.message || 'Failed to generate card data');
+    }
+
+    const chatData = await chatResponse.json();
+    const content = chatData.choices[0]?.message?.content;
+    
+    if (!content) {
+      throw new Error('No content returned from GPT');
+    }
+
+    // Parse the JSON response
+    let monsterData;
+    try {
+      monsterData = JSON.parse(content);
+    } catch (parseError) {
+      console.error('Failed to parse GPT response:', content);
+      throw new Error('Invalid JSON returned from AI');
+    }
+
+    // Validate required fields
+    if (!monsterData.name) {
+      throw new Error('Generated monster data missing required field: name');
+    }
+
+    // Generate image based on the monster name with enhanced context
+    let imageDataUrl = null;
+    try {
+      const imageResult = await generateMonsterImage(monsterData.name, monsterData);
+      
+      if (imageResult) {
+        // Convert to data URL for frontend (don't save to database)
+        if (imageResult.type === 'base64') {
+          const mimeType = imageResult.extension === 'png' ? 'image/png' : 'image/jpeg';
+          imageDataUrl = `data:${mimeType};base64,${imageResult.data}`;
+        } else if (imageResult.type === 'url') {
+          // Download the image and convert to base64 data URL
+          try {
+            const imageResponse = await fetch(imageResult.url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; MonsterCardImageProxy/1.0)',
+              },
+            });
+            
+            if (imageResponse.ok) {
+              const arrayBuffer = await imageResponse.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              const base64 = buffer.toString('base64');
+              const contentType = imageResponse.headers.get('content-type') || 'image/png';
+              imageDataUrl = `data:${contentType};base64,${base64}`;
+            } else {
+              console.warn('Failed to download image from URL:', imageResult.url);
+            }
+          } catch (downloadError) {
+            console.error('Error downloading image:', downloadError);
+            // Fall back to URL if download fails
+            imageDataUrl = imageResult.url;
+          }
+        }
+      }
+    } catch (imageError) {
+      console.error('Failed to generate image (non-fatal):', imageError);
+      // Don't fail the whole request if image generation fails
+    }
+
+    // Return the monster data and image
+    res.json({
+      monster: monsterData,
+      image: imageDataUrl,
+    });
+  } catch (error) {
+    console.error('Error generating card:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to generate card',
+    });
+  }
+});
+
 // Proxy endpoint for images (legacy - now images are local, but keep for backward compatibility)
 app.get('/api/proxy-image', async (req, res) => {
   try {
@@ -495,7 +847,23 @@ app.get('/api/proxy-image', async (req, res) => {
   }
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ 
+    error: NODE_ENV === 'production' 
+      ? 'Internal server error' 
+      : err.message 
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
 app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`);
+  console.log(`Environment: ${NODE_ENV}`);
 });
 

@@ -17,6 +17,9 @@ public/images/monsters/*
 .env
 .env.local
 
+# Analytics data
+data/analytics.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

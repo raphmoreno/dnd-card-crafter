@@ -6,6 +6,7 @@ import { PrintPreview } from "./PrintPreview";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { toast } from "sonner";
+import { trackPDFDownload } from "@/lib/analytics";
 
 interface PDFGeneratorProps {
   monsters: Monster[];
@@ -264,6 +265,11 @@ export function PDFGenerator({ monsters }: PDFGeneratorProps) {
       }
 
       pdf.save("dnd-monster-cards.pdf");
+      
+      // Track PDF download
+      const pageCount = Math.ceil(monsters.length / 4);
+      trackPDFDownload(monsters.length, pageCount);
+      
       toast.success("PDF generated successfully! Print and fold cards horizontally.");
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -282,36 +288,65 @@ export function PDFGenerator({ monsters }: PDFGeneratorProps) {
     }
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
+  if (monsters.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        <p className="font-display text-lg mb-2">No cards to preview</p>
+        <p className="text-sm">Add monsters from the Search or Selected tabs to see a preview</p>
+      </div>
+    );
+  }
+
+  const pageCount = Math.ceil(monsters.length / 4);
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="font-display text-xl text-foreground">Print Preview</h2>
-          <p className="text-sm text-muted-foreground">
-            {monsters.length} card{monsters.length !== 1 ? "s" : ""} • 
-            {Math.ceil(monsters.length / 4)} page{Math.ceil(monsters.length / 4) !== 1 ? "s" : ""} (A4 Landscape)
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Fold each card horizontally in the middle to create tent cards
-          </p>
+      <div className="flex justify-between items-start">
+        <h2 className="font-display text-xl font-semibold text-gray-900">Card Preview</h2>
+        <div className="flex gap-3">
+          <Button
+            onClick={generatePDF}
+            disabled={isGenerating}
+            className="gap-2 bg-gray-900 hover:bg-gray-800 text-white"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <FileDown className="h-4 w-4" />
+                Export PDF
+              </>
+            )}
+          </Button>
+          <Button
+            onClick={handlePrint}
+            variant="outline"
+            className="gap-2 border-gray-300"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Print
+          </Button>
         </div>
-        <Button
-          onClick={generatePDF}
-          disabled={monsters.length === 0 || isGenerating}
-          className="gap-2"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <FileDown className="h-4 w-4" />
-              Download PDF
-            </>
-          )}
-        </Button>
+      </div>
+
+      {/* Printing Instructions */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-semibold text-gray-900 mb-2">Printing Instructions:</h3>
+        <p className="text-sm text-gray-700 mb-2">
+          Cards are designed for A4 landscape printing. Each card is 200mm x 72mm. Print and fold horizontally along the dashed line. The monster image faces players, and the stat block faces you (the DM).
+        </p>
+        <p className="text-sm font-medium text-gray-900">
+          Total cards: {monsters.length} • Pages needed: {pageCount}
+        </p>
       </div>
 
       {/* Hidden print preview for PDF generation - invisible but renderable for html2canvas */}
@@ -331,7 +366,7 @@ export function PDFGenerator({ monsters }: PDFGeneratorProps) {
       </div>
 
       {/* Visible preview - scaled down */}
-      <div className="border border-border rounded-lg overflow-auto max-h-[500px] bg-secondary/30 p-4">
+      <div className="border border-gray-200 rounded-lg overflow-auto max-h-[600px] bg-gray-50 p-4">
         <div 
           className="origin-top-left"
           style={{ 

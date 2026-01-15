@@ -6,35 +6,35 @@
 
 @layer base {
   :root {
-    --background: 30 15% 12%;
-    --foreground: 40 20% 90%;
+    --background: 0 0% 96%;
+    --foreground: 0 0% 10%;
 
-    --card: 35 25% 88%;
-    --card-foreground: 30 30% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
 
-    --popover: 30 20% 18%;
-    --popover-foreground: 40 20% 90%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
 
-    --primary: 35 50% 45%;
-    --primary-foreground: 40 20% 95%;
+    --primary: 0 84% 60%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 30 15% 25%;
-    --secondary-foreground: 40 20% 90%;
+    --secondary: 0 0% 90%;
+    --secondary-foreground: 0 0% 10%;
 
-    --muted: 30 10% 30%;
-    --muted-foreground: 40 15% 65%;
+    --muted: 0 0% 85%;
+    --muted-foreground: 0 0% 45%;
 
-    --accent: 25 60% 40%;
-    --accent-foreground: 40 20% 95%;
+    --accent: 0 84% 60%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 40 20% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 30 20% 30%;
-    --input: 30 15% 25%;
-    --ring: 35 50% 45%;
+    --border: 0 0% 85%;
+    --input: 0 0% 100%;
+    --ring: 0 84% 60%;
 
-    --radius: 0.25rem;
+    --radius: 0.5rem;
 
     /* D&D specific tokens */
     --parchment: 40 35% 88%;
@@ -97,8 +97,8 @@
   }
 
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Spectral', Georgia, serif;
+    @apply bg-gray-100 text-gray-900;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -141,19 +141,19 @@
 
   .creature-name {
     font-family: 'Cinzel', serif;
-    color: hsl(var(--stat-header));
+    color: hsl(0 84% 40%);
     font-weight: 600;
     letter-spacing: 0.05em;
   }
 
   .section-header {
     font-family: 'Cinzel', serif;
-    color: hsl(var(--stat-header));
+    color: hsl(0 84% 40%);
     font-weight: 600;
     font-size: 0.65rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    border-bottom: 1px solid hsl(var(--section-divider));
+    border-bottom: 1px solid hsl(0 84% 50%);
   }
 
   .stat-label {

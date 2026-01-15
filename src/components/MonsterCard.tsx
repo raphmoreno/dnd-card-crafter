@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Check, X, Loader2 } from "lucide-react";
 import { useMonsterImage } from "@/hooks/use-monster-image";
+import { trackImageRegeneration } from "@/lib/analytics";
 
 interface MonsterCardProps {
   monster: Monster;
@@ -41,6 +42,9 @@ export function MonsterCard({ monster, forPrint = false }: MonsterCardProps) {
   // Function to regenerate image (only works for preview cards)
   const handleRegenerate = async () => {
     if (isGenerating || forPrint) return;
+    
+    // Track regeneration attempt
+    trackImageRegeneration(monster.name);
     
     // Store current image as original in case we need to revert
     if (!originalImageUrl && imageUrl) {
@@ -100,10 +104,10 @@ export function MonsterCard({ monster, forPrint = false }: MonsterCardProps) {
   const showImage = displayImageUrl && !imageError;
   
   // For print: width ~72mm (fits 4 on A4 landscape 297mm with minimal gaps), height ~200mm (fills A4 height 210mm)
-  // For preview: scaled down version
+  // For preview: vertical format matching 1024:1536 ratio (2:3 aspect ratio)
   const cardStyle = forPrint 
     ? { width: "72mm", height: "200mm" }
-    : { width: "100px", height: "280px" };
+    : { width: "120px", height: "180px" }; // 2:3 ratio for vertical preview
 
   return (
     <div 
