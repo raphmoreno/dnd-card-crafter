@@ -5,6 +5,7 @@ import { StatBlock } from "./StatBlock";
 import { getMonsterImageUrl, addImageToCache } from "@/lib/monster-images";
 import { generateMonsterImage } from "@/lib/monster-images-api";
 import { trackImageRegeneration } from "@/lib/analytics";
+import { apiUrl } from "@/lib/api-config";
 import { Image as ImageIcon, RefreshCw, Check, X, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getModifier, formatSpeed, formatSavingThrows, formatSkills } from "@/lib/open5e";
@@ -163,7 +164,7 @@ export function CardPreviewDialog({ monster, open, onOpenChange }: CardPreviewDi
     
     try {
       // Save to database via API
-      const response = await fetch('/api/save-monster-image', {
+      const response = await fetch(apiUrl('/api/save-monster-image'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

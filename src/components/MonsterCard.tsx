@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, Check, X, Loader2 } from "lucide-react";
 import { useMonsterImage } from "@/hooks/use-monster-image";
 import { trackImageRegeneration } from "@/lib/analytics";
+import { apiUrl } from "@/lib/api-config";
 
 interface MonsterCardProps {
   monster: Monster;
@@ -66,7 +67,7 @@ export function MonsterCard({ monster, forPrint = false }: MonsterCardProps) {
     
     try {
       // Save to database via API
-      const response = await fetch('/api/save-monster-image', {
+      const response = await fetch(apiUrl('/api/save-monster-image'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

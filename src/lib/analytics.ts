@@ -2,6 +2,7 @@
  * Analytics tracking utility
  * Tracks key user events for usage analytics
  */
+import { apiUrl } from './api-config';
 
 export type EventType = 'search' | 'monster_added' | 'pdf_download' | 'image_regeneration';
 
@@ -25,7 +26,7 @@ export async function trackEvent(
       return; // Skip tracking in development unless explicitly enabled
     }
 
-    const response = await fetch('/api/analytics/track', {
+    const response = await fetch(apiUrl('/api/analytics/track'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

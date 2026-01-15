@@ -1,6 +1,7 @@
 /**
  * API functions for generating and fetching monster images
  */
+import { apiUrl } from './api-config';
 
 /**
  * Check if the API server is available
@@ -11,7 +12,7 @@ async function isApiServerAvailable(): Promise<boolean> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1000); // 1 second timeout
     
-    await fetch('/api/generate-monster-image', {
+    await fetch(apiUrl('/api/generate-monster-image'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -34,7 +35,7 @@ async function isApiServerAvailable(): Promise<boolean> {
  */
 export async function generateMonsterImageWithCache(monsterName: string): Promise<string | null> {
   try {
-    const response = await fetch('/api/generate-monster-image', {
+    const response = await fetch(apiUrl('/api/generate-monster-image'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -74,7 +75,7 @@ export async function generateMonsterImageWithCache(monsterName: string): Promis
  */
 export async function generateMonsterImage(monsterName: string): Promise<string> {
   try {
-    const response = await fetch('/api/regenerate-monster-image', {
+    const response = await fetch(apiUrl('/api/regenerate-monster-image'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -1,0 +1,39 @@
+# Cloudflare Workers Configuration
+# Documentation: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "dnd-card-crafter-api"
+main = "cloudflare/worker.js"
+compatibility_date = "2024-01-01"
+
+# Environment variables (set via wrangler secret put or in dashboard)
+# OPENAI_API_KEY - Your OpenAI API key
+# Set via: wrangler secret put OPENAI_API_KEY
+
+# R2 Bucket for storing monster images
+[[r2_buckets]]
+binding = "IMAGES_R2"
+bucket_name = "dnd-card-images"
+preview_bucket_name = "dnd-card-images-preview"
+
+# KV Namespace for analytics and image mappings
+[[kv_namespaces]]
+binding = "ANALYTICS_KV"
+id = "your-kv-namespace-id"  # Replace with your KV namespace ID
+preview_id = "your-kv-preview-id"  # Replace with your preview KV namespace ID
+
+# Routes (optional - if you want custom domain)
+# routes = [
+#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+# ]
+
+# Build configuration
+[build]
+command = ""
+
+# Environment-specific settings
+[env.production]
+name = "dnd-card-crafter-api-prod"
+
+[env.staging]
+name = "dnd-card-crafter-api-staging"
+
