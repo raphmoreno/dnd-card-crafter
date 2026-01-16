@@ -8,12 +8,19 @@
  * Uses VITE_API_URL environment variable if set, otherwise defaults to relative path
  */
 export function getApiBaseUrl(): string {
+  // Debug: Log the environment variable (remove in production if needed)
+  const apiUrl = import.meta.env.VITE_API_URL;
+  console.log('[API Config] VITE_API_URL:', apiUrl || '(not set)');
+  console.log('[API Config] All env vars:', Object.keys(import.meta.env).filter(k => k.startsWith('VITE_')));
+  
   // In production with Cloudflare, use the environment variable
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    // Ensure it doesn't end with a slash
+    return apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
   }
   
   // In development or when no env var is set, use relative paths (works with proxy)
+  console.warn('[API Config] VITE_API_URL not set, using relative paths');
   return '';
 }
 

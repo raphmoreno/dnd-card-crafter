@@ -103,7 +103,13 @@ After deployment, you'll get a URL like: `https://dnd-card-crafter-api.your-subd
    - **Build output directory**: `dist`
    - **Root directory**: `/` (or leave empty)
    - **Node version**: `22` (or latest LTS)
-   - **Deploy command**: (LEAVE EMPTY - do not set this!)
+   - **Deploy command**: `echo "Deployment complete"` (if required) or leave empty
+   
+   **Note**: If environment variables aren't working, you can also set them in the build command:
+   ```
+   VITE_API_URL=https://your-worker.workers.dev npm ci && npm run build
+   ```
+   (But it's better to use the Environment variables section)
 
 5. **CRITICAL**: Make sure the **Deploy command** field is EMPTY or not set!
    - Cloudflare Pages only needs the static files from `dist/`
@@ -117,11 +123,16 @@ After deployment, you'll get a URL like: `https://dnd-card-crafter-api.your-subd
 6. **Add environment variables** (CRITICAL for API connection):
    - `VITE_API_URL`: **Your Worker URL from Step 7** (e.g., `https://dnd-card-crafter-api.your-subdomain.workers.dev`)
      - This tells the frontend where to find your API
-     - Must be the full URL (not relative)
+     - Must be the **full URL with https://** (not relative)
+     - Example: `https://dnd-card-crafter-api.raphael.workers.dev`
    - `VITE_ANALYTICS_ENABLED`: `true`
    - `NPM_FLAGS`: `--legacy-peer-deps` (if you encounter peer dependency issues)
 
    **How to add**: Pages → Your Project → Settings → Environment variables → Add variable
+   
+   **⚠️ CRITICAL**: After setting environment variables, you MUST trigger a new build!
+   - Environment variables must be available at BUILD time
+   - Go to Deployments → Retry deployment (or push a new commit)
 
 7. **IMPORTANT**: For "Deploy command" field:
    - If it's marked as "Required", use: `echo "Deployment complete"`
@@ -350,6 +361,20 @@ See `CLOUDFLARE_DEPLOY_FIX.md` for detailed instructions.
 1. Verify CORS headers in Worker code
 2. Check R2 bucket CORS settings
 3. Ensure frontend URL is allowed in CORS
+
+### API Calls Going to Pages Instead of Worker (405 Errors):
+
+**Symptom**: Frontend calls `https://your-pages.pages.dev/api/...` instead of Worker URL, getting 405 errors.
+
+**Cause**: `VITE_API_URL` environment variable not set or not available at build time.
+
+**Fix**:
+1. Go to Pages → Settings → Environment variables
+2. Add `VITE_API_URL` with your Worker URL (full URL with `https://`)
+3. **Trigger a new build** (Deployments → Retry deployment)
+4. Environment variables must be set BEFORE build runs
+
+See `CLOUDFLARE_API_FIX.md` for detailed troubleshooting.
 
 ## Security Best Practices
 
