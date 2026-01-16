@@ -145,8 +145,34 @@ async function generateMonsterImage(monsterName, env) {
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Failed to generate image');
+    // Check content type before parsing
+    const contentType = response.headers.get('content-type') || '';
+    let errorMessage = `Failed to generate image: ${response.status} ${response.statusText}`;
+    
+    if (contentType.includes('application/json')) {
+      try {
+        const error = await response.json();
+        errorMessage = error.error?.message || error.message || errorMessage;
+      } catch (e) {
+        // If JSON parsing fails, use default message
+        console.error('Failed to parse error response as JSON:', e);
+      }
+    } else {
+      // Not JSON - might be HTML error page (Cloudflare error)
+      const text = await response.text();
+      console.error('Non-JSON error response:', text.substring(0, 200));
+      
+      // Check for Cloudflare errors
+      if (text.includes('error code: 1015') || response.status === 1015) {
+        errorMessage = 'Cloudflare rate limit: Too many requests. Please try again later.';
+      } else if (response.status === 429) {
+        errorMessage = 'OpenAI API rate limit exceeded. Please try again later.';
+      } else if (response.status === 401) {
+        errorMessage = 'OpenAI API authentication failed. Check API key.';
+      }
+    }
+    
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();

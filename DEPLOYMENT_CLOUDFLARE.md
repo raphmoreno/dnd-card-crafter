@@ -9,7 +9,7 @@ This guide will help you deploy the D&D Card Crafter application to Cloudflare W
 - **Images**: Cloudflare R2 (object storage)
 - **Analytics**: Cloudflare KV (key-value store)
 
-**Important**: The API (Worker) and Frontend (Pages) are deployed **separately** and communicate via HTTP. See `CLOUDFLARE_ARCHITECTURE.md` for detailed explanation.
+**Important**: The API (Worker) and Frontend (Pages) are deployed **separately** and communicate via HTTP. The frontend makes HTTP requests to the Worker URL.
 
 ## Prerequisites
 
@@ -70,6 +70,13 @@ wrangler secret put OPENAI_API_KEY
 # Enter your OpenAI API key when prompted
 ```
 
+**Verify it's set**:
+```bash
+wrangler secret list
+```
+
+You should see `OPENAI_API_KEY` in the list. If not, the Worker will fail with 500 errors.
+
 ## Step 6: Update wrangler.toml
 
 Edit `wrangler.toml` and replace the placeholder KV namespace IDs with the actual IDs from Step 4.
@@ -99,16 +106,11 @@ After deployment, you'll get a URL like: `https://dnd-card-crafter-api.your-subd
 3. Select your repository
 4. Configure build settings:
    - **Framework preset**: Vite
-   - **Build command**: `VITE_API_URL=https://dnd-card-crafter-api.raphael-6e5.workers.dev npm ci && npm run build`
-     - **IMPORTANT**: Replace `https://dnd-card-crafter-api.raphael-6e5.workers.dev` with your actual Worker URL
-     - This sets the environment variable directly in the build command
-     - Cloudflare Pages environment variables section may not work for Vite build-time variables
+   - **Build command**: `VITE_API_URL=https://your-worker.workers.dev npm ci && npm run build` (replace with your Worker URL)
    - **Build output directory**: `dist`
    - **Root directory**: `/` (or leave empty)
    - **Node version**: `22` (or latest LTS)
    - **Deploy command**: `echo "Deployment complete"` (if required) or leave empty
-   
-   **Why in build command?**: Vite needs environment variables at BUILD time, not runtime. Setting it in the build command ensures it's available when Vite creates the static files.
 
 5. **CRITICAL**: Make sure the **Deploy command** field is EMPTY or not set!
    - Cloudflare Pages only needs the static files from `dist/`
@@ -119,19 +121,11 @@ After deployment, you'll get a URL like: `https://dnd-card-crafter-api.your-subd
    - Use `npm ci` instead of `bun install` (this forces npm usage)
    - Or add a build environment variable: `NPM_FLAGS=--legacy-peer-deps` if needed
 
-6. **Add environment variables** (CRITICAL for API connection):
-   - `VITE_API_URL`: **Your Worker URL from Step 7** (e.g., `https://dnd-card-crafter-api.your-subdomain.workers.dev`)
-     - This tells the frontend where to find your API
-     - Must be the **full URL with https://** (not relative)
-     - Example: `https://dnd-card-crafter-api.raphael.workers.dev`
+6. **Add environment variables** (if not using build command method):
+   - `VITE_API_URL`: Your Worker URL (full URL with `https://`)
    - `VITE_ANALYTICS_ENABLED`: `true`
-   - `NPM_FLAGS`: `--legacy-peer-deps` (if you encounter peer dependency issues)
-
-   **How to add**: Pages → Your Project → Settings → Environment variables → Add variable
    
-   **⚠️ CRITICAL**: After setting environment variables, you MUST trigger a new build!
-   - Environment variables must be available at BUILD time
-   - Go to Deployments → Retry deployment (or push a new commit)
+   **Note**: If using Git integration, set variables in Pages → Settings → Environment variables, then trigger a new build.
 
 7. **IMPORTANT**: For "Deploy command" field:
    - If it's marked as "Required", use: `echo "Deployment complete"`
@@ -148,9 +142,6 @@ After deployment, you'll get a URL like: `https://dnd-card-crafter-api.your-subd
 # Set the environment variable (replace with your Worker URL)
 export VITE_API_URL=https://dnd-card-crafter-api.raphael-6e5.workers.dev
 
-# Install dependencies
-npm ci
-
 # Build the frontend (Vite will embed VITE_API_URL)
 npm run build
 
@@ -158,11 +149,7 @@ npm run build
 wrangler pages deploy dist --project-name=dnd-card-crafter
 ```
 
-**Or use the .env.production file**:
-1. Create `.env.production` with: `VITE_API_URL=https://your-worker.workers.dev`
-2. Then just run: `npm run build && wrangler pages deploy dist --project-name=dnd-card-crafter`
-
-See `DEPLOYMENT_LOCAL_BUILD.md` for detailed instructions.
+**Or create `.env.production`** with: `VITE_API_URL=https://your-worker.workers.dev`
 
 ### Fixing the Bun Lockfile Issue
 
@@ -327,64 +314,56 @@ For most use cases, the free tier should be sufficient.
 
 ## Troubleshooting
 
-### Pages Deployment Stuck on "Deploying to Cloudflare Global Network"
+### Build Issues
 
-**Symptom**: Build completes successfully but deployment hangs, showing it's running `npm run dev:all` or similar.
+**Bun lockfile error**: Remove `bun.lockb` from git: `git rm --cached bun.lockb`
 
-**Cause**: A "Deploy command" is set that starts a development server, which never exits.
+**Build stuck on deploy**: Set "Deploy command" to `echo "Deployment complete"` (or leave empty)
 
-**Fix**:
-1. Go to Pages → Your Project → Settings → Builds & deployments
-2. Find "Deploy command" field
-3. If it's marked as "Required", set it to: `echo "Deployment complete"`
-4. If it's optional, leave it empty
-5. **DO NOT** use `npm run dev:all` or any server command
-6. Save and retry deployment
+### Environment Variable Not Working (API calls go to Pages instead of Worker)
 
-Cloudflare Pages automatically deploys the `dist/` folder. The deploy command should just exit successfully, not start a server.
+**If building locally** (using `wrangler pages deploy`):
+```bash
+# Set variable before building
+export VITE_API_URL=https://your-worker.workers.dev
+npm run build
+wrangler pages deploy dist --project-name=dnd-card-crafter
+```
 
-See `CLOUDFLARE_DEPLOY_FIX.md` for detailed instructions.
+**Or create `.env.production`**:
+```
+VITE_API_URL=https://your-worker.workers.dev
+```
 
-### Worker Not Deploying:
+**If building in Cloudflare Pages** (Git integration):
+- Set `VITE_API_URL` in Pages → Settings → Environment variables
+- Must trigger new build after setting
 
-1. Check `wrangler.toml` syntax
-2. Verify KV namespace IDs are correct
-3. Check R2 bucket names match
-4. View deployment logs: `wrangler deploy --verbose`
+### Worker 500 Errors
 
-### Images Not Loading:
+**Check API key is set**:
+```bash
+wrangler secret list
+# If missing: wrangler secret put OPENAI_API_KEY
+```
 
-1. Verify R2 bucket is accessible
-2. Check CORS settings on R2 bucket
-3. Verify Worker has R2 binding configured
-4. Check Worker logs: `wrangler tail`
+**Check logs**:
+```bash
+wrangler tail
+```
 
-### Analytics Not Working:
+**Common errors**:
+- Error 1015: Cloudflare rate limit - wait and retry
+- 401: API key invalid or missing
+- 429: OpenAI rate limit - wait and retry
 
-1. Verify KV namespace is created and bound
-2. Check KV namespace IDs in `wrangler.toml`
-3. View KV data in dashboard
-4. Check Worker logs for errors
+### Other Issues
 
-### CORS Errors:
+**Images not loading**: Check R2 bucket exists and Worker has binding configured
 
-1. Verify CORS headers in Worker code
-2. Check R2 bucket CORS settings
-3. Ensure frontend URL is allowed in CORS
+**Analytics not working**: Verify KV namespace IDs in `wrangler.toml` are correct
 
-### API Calls Going to Pages Instead of Worker (405 Errors):
-
-**Symptom**: Frontend calls `https://your-pages.pages.dev/api/...` instead of Worker URL, getting 405 errors.
-
-**Cause**: `VITE_API_URL` environment variable not set or not available at build time.
-
-**Fix**:
-1. Go to Pages → Settings → Environment variables
-2. Add `VITE_API_URL` with your Worker URL (full URL with `https://`)
-3. **Trigger a new build** (Deployments → Retry deployment)
-4. Environment variables must be set BEFORE build runs
-
-See `CLOUDFLARE_API_FIX.md` for detailed troubleshooting.
+**CORS errors**: Worker CORS headers are configured - check Worker logs for specific errors
 
 ## Security Best Practices
 
