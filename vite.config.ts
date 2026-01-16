@@ -21,4 +21,6 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Note: Vite automatically exposes VITE_* environment variables from process.env
+  // Make sure VITE_API_URL is set in the build command or environment
 }));

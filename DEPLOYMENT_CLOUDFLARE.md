@@ -99,17 +99,16 @@ After deployment, you'll get a URL like: `https://dnd-card-crafter-api.your-subd
 3. Select your repository
 4. Configure build settings:
    - **Framework preset**: Vite
-   - **Build command**: `npm ci && npm run build`
+   - **Build command**: `VITE_API_URL=https://dnd-card-crafter-api.raphael-6e5.workers.dev npm ci && npm run build`
+     - **IMPORTANT**: Replace `https://dnd-card-crafter-api.raphael-6e5.workers.dev` with your actual Worker URL
+     - This sets the environment variable directly in the build command
+     - Cloudflare Pages environment variables section may not work for Vite build-time variables
    - **Build output directory**: `dist`
    - **Root directory**: `/` (or leave empty)
    - **Node version**: `22` (or latest LTS)
    - **Deploy command**: `echo "Deployment complete"` (if required) or leave empty
    
-   **Note**: If environment variables aren't working, you can also set them in the build command:
-   ```
-   VITE_API_URL=https://your-worker.workers.dev npm ci && npm run build
-   ```
-   (But it's better to use the Environment variables section)
+   **Why in build command?**: Vite needs environment variables at BUILD time, not runtime. Setting it in the build command ensures it's available when Vite creates the static files.
 
 5. **CRITICAL**: Make sure the **Deploy command** field is EMPTY or not set!
    - Cloudflare Pages only needs the static files from `dist/`
@@ -141,18 +140,29 @@ After deployment, you'll get a URL like: `https://dnd-card-crafter-api.your-subd
 
 8. Deploy!
 
-### Option B: Deploy via Wrangler
+### Option B: Deploy via Wrangler (Local Build)
+
+**Important**: When building locally, you must set `VITE_API_URL` before building!
 
 ```bash
-# Install dependencies with npm (not bun)
+# Set the environment variable (replace with your Worker URL)
+export VITE_API_URL=https://dnd-card-crafter-api.raphael-6e5.workers.dev
+
+# Install dependencies
 npm ci
 
-# Build the frontend
+# Build the frontend (Vite will embed VITE_API_URL)
 npm run build
 
 # Deploy to Pages
 wrangler pages deploy dist --project-name=dnd-card-crafter
 ```
+
+**Or use the .env.production file**:
+1. Create `.env.production` with: `VITE_API_URL=https://your-worker.workers.dev`
+2. Then just run: `npm run build && wrangler pages deploy dist --project-name=dnd-card-crafter`
+
+See `DEPLOYMENT_LOCAL_BUILD.md` for detailed instructions.
 
 ### Fixing the Bun Lockfile Issue
 

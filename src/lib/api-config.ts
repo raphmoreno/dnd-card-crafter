@@ -11,12 +11,16 @@ export function getApiBaseUrl(): string {
   // Debug: Log the environment variable (remove in production if needed)
   const apiUrl = import.meta.env.VITE_API_URL;
   console.log('[API Config] VITE_API_URL:', apiUrl || '(not set)');
-  console.log('[API Config] All env vars:', Object.keys(import.meta.env).filter(k => k.startsWith('VITE_')));
+  console.log('[API Config] import.meta.env keys:', Object.keys(import.meta.env));
+  console.log('[API Config] import.meta.env.MODE:', import.meta.env.MODE);
+  console.log('[API Config] import.meta.env.PROD:', import.meta.env.PROD);
   
   // In production with Cloudflare, use the environment variable
-  if (apiUrl) {
+  if (apiUrl && typeof apiUrl === 'string' && apiUrl.trim() !== '') {
     // Ensure it doesn't end with a slash
-    return apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+    const cleanUrl = apiUrl.trim().endsWith('/') ? apiUrl.trim().slice(0, -1) : apiUrl.trim();
+    console.log('[API Config] Using API URL:', cleanUrl);
+    return cleanUrl;
   }
   
   // In development or when no env var is set, use relative paths (works with proxy)

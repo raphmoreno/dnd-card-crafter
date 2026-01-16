@@ -37,3 +37,8 @@ name = "dnd-card-crafter-api-prod"
 [env.staging]
 name = "dnd-card-crafter-api-staging"
 
+[observability]
+[observability.logs]
+enabled = false
+invocation_logs = true
+
