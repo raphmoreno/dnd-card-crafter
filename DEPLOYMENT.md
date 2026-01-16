@@ -169,7 +169,7 @@ After deployment, you'll get a URL like: `https://dnd-card-crafter-api.your-subd
 
 ```bash
 # Set the environment variable (replace with your Worker URL)
-export VITE_API_URL=https://dnd-card-crafter-api.raphael-6e5.workers.dev
+export VITE_API_URL=https://your-worker.workers.dev
 
 # Build the frontend (Vite will embed VITE_API_URL)
 npm run build
