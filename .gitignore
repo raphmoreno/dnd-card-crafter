@@ -16,6 +16,7 @@ public/images/monsters/*
 # Environment variables
 .env
 .env.local
+.env.production
 
 # Analytics data
 data/analytics.json
