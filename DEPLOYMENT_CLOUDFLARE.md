@@ -9,6 +9,8 @@ This guide will help you deploy the D&D Card Crafter application to Cloudflare W
 - **Images**: Cloudflare R2 (object storage)
 - **Analytics**: Cloudflare KV (key-value store)
 
+**Important**: The API (Worker) and Frontend (Pages) are deployed **separately** and communicate via HTTP. See `CLOUDFLARE_ARCHITECTURE.md` for detailed explanation.
+
 ## Prerequisites
 
 1. Cloudflare account (free tier works)
@@ -84,7 +86,11 @@ wrangler deploy --env production
 
 After deployment, you'll get a URL like: `https://dnd-card-crafter-api.your-subdomain.workers.dev`
 
+**⚠️ IMPORTANT**: Save this Worker URL - you'll need it for the frontend configuration!
+
 ## Step 8: Deploy Frontend to Cloudflare Pages
+
+**Note**: The API (Worker) and Frontend (Pages) are separate deployments. The frontend will make HTTP requests to your Worker URL.
 
 ### Option A: Connect GitHub Repository
 
@@ -93,25 +99,73 @@ After deployment, you'll get a URL like: `https://dnd-card-crafter-api.your-subd
 3. Select your repository
 4. Configure build settings:
    - **Framework preset**: Vite
-   - **Build command**: `npm run build`
+   - **Build command**: `npm ci && npm run build`
    - **Build output directory**: `dist`
    - **Root directory**: `/` (or leave empty)
+   - **Node version**: `22` (or latest LTS)
+   - **Deploy command**: (LEAVE EMPTY - do not set this!)
 
-5. Add environment variables:
-   - `VITE_API_URL`: Your Worker URL (e.g., `https://dnd-card-crafter-api.your-subdomain.workers.dev`)
+5. **CRITICAL**: Make sure the **Deploy command** field is EMPTY or not set!
+   - Cloudflare Pages only needs the static files from `dist/`
+   - Do NOT set deploy command to `npm run dev:all` or any dev server command
+   - The build command creates the static files, and Pages deploys them automatically
+
+6. **Important**: In the build settings, make sure to:
+   - Use `npm ci` instead of `bun install` (this forces npm usage)
+   - Or add a build environment variable: `NPM_FLAGS=--legacy-peer-deps` if needed
+
+6. **Add environment variables** (CRITICAL for API connection):
+   - `VITE_API_URL`: **Your Worker URL from Step 7** (e.g., `https://dnd-card-crafter-api.your-subdomain.workers.dev`)
+     - This tells the frontend where to find your API
+     - Must be the full URL (not relative)
    - `VITE_ANALYTICS_ENABLED`: `true`
+   - `NPM_FLAGS`: `--legacy-peer-deps` (if you encounter peer dependency issues)
 
-6. Deploy!
+   **How to add**: Pages → Your Project → Settings → Environment variables → Add variable
+
+7. **IMPORTANT**: For "Deploy command" field:
+   - If it's marked as "Required", use: `echo "Deployment complete"`
+   - If it's optional, leave it empty
+   - **DO NOT** use `npm run dev:all` or any command that starts a server
+
+8. Deploy!
 
 ### Option B: Deploy via Wrangler
 
 ```bash
+# Install dependencies with npm (not bun)
+npm ci
+
 # Build the frontend
 npm run build
 
 # Deploy to Pages
 wrangler pages deploy dist --project-name=dnd-card-crafter
 ```
+
+### Fixing the Bun Lockfile Issue
+
+If Cloudflare Pages is still trying to use bun:
+
+1. **Remove bun.lockb from repository** (already added to .gitignore):
+   ```bash
+   git rm --cached bun.lockb
+   git commit -m "Remove bun.lockb, use npm instead"
+   git push
+   ```
+
+2. **In Cloudflare Pages settings**, explicitly set:
+   - **Package manager**: npm (not auto-detect)
+   - **Build command**: `npm ci && npm run build`
+   - **Install command**: `npm ci` (or leave empty to auto-detect)
+
+3. **Alternative**: Create a `_build.sh` script in your repo root:
+   ```bash
+   #!/bin/bash
+   npm ci
+   npm run build
+   ```
+   Then set build command to: `bash _build.sh`
 
 ## Step 9: Update Frontend API URL
 
@@ -251,6 +305,24 @@ wrangler pages deploy dist --project-name=dnd-card-crafter
 For most use cases, the free tier should be sufficient.
 
 ## Troubleshooting
+
+### Pages Deployment Stuck on "Deploying to Cloudflare Global Network"
+
+**Symptom**: Build completes successfully but deployment hangs, showing it's running `npm run dev:all` or similar.
+
+**Cause**: A "Deploy command" is set that starts a development server, which never exits.
+
+**Fix**:
+1. Go to Pages → Your Project → Settings → Builds & deployments
+2. Find "Deploy command" field
+3. If it's marked as "Required", set it to: `echo "Deployment complete"`
+4. If it's optional, leave it empty
+5. **DO NOT** use `npm run dev:all` or any server command
+6. Save and retry deployment
+
+Cloudflare Pages automatically deploys the `dist/` folder. The deploy command should just exit successfully, not start a server.
+
+See `CLOUDFLARE_DEPLOY_FIX.md` for detailed instructions.
 
 ### Worker Not Deploying:
 

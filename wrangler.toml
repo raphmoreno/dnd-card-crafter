@@ -18,8 +18,8 @@ preview_bucket_name = "dnd-card-images-preview"
 # KV Namespace for analytics and image mappings
 [[kv_namespaces]]
 binding = "ANALYTICS_KV"
-id = "your-kv-namespace-id"  # Replace with your KV namespace ID
-preview_id = "your-kv-preview-id"  # Replace with your preview KV namespace ID
+id = "58ce9adabdec407a9049cf645432734c"
+preview_id = "03733ade951c409390883e8f6329bc3e"
 
 # Routes (optional - if you want custom domain)
 # routes = [

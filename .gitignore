@@ -20,6 +20,9 @@ public/images/monsters/*
 # Analytics data
 data/analytics.json
 
+# Bun lockfile (we use npm)
+bun.lockb
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
