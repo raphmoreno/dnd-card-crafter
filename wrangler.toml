@@ -21,6 +21,13 @@ binding = "ANALYTICS_KV"
 id = "58ce9adabdec407a9049cf645432734c"
 preview_id = "03733ade951c409390883e8f6329bc3e"
 
+# D1 Database for monsters
+[[d1_databases]]
+binding = "MONSTERS_DB"
+database_name = "monsters-db"
+database_id = ""  # Will be set after creating the database
+preview_database_id = ""  # Will be set after creating the preview database
+
 # Routes (optional - if you want custom domain)
 # routes = [
 #   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
@@ -39,6 +46,6 @@ name = "dnd-card-crafter-api-staging"
 
 [observability]
 [observability.logs]
-enabled = false
+enabled = true
 invocation_logs = true
 

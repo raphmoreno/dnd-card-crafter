@@ -48,7 +48,7 @@ function base64ToArrayBuffer(base64) {
 }
 
 // Save image to R2
-async function saveImageToR2(r2Bucket, imageData, monsterName, extension = 'png') {
+async function saveImageToR2(r2Bucket, imageData, monsterName, extension = 'png', baseUrl = null) {
   const filename = `${sanitizeFilename(monsterName)}.${extension}`;
   const key = `monsters/${filename}`;
   
@@ -73,11 +73,16 @@ async function saveImageToR2(r2Bucket, imageData, monsterName, extension = 'png'
     },
   });
   
-  return `/images/monsters/${filename}`;
+  // Return absolute URL if baseUrl provided, otherwise relative
+  const relativePath = `/images/monsters/${filename}`;
+  if (baseUrl) {
+    return `${baseUrl}${relativePath}`;
+  }
+  return relativePath;
 }
 
 // Download image from URL and save to R2
-async function downloadAndSaveImage(r2Bucket, imageUrl, monsterName) {
+async function downloadAndSaveImage(r2Bucket, imageUrl, monsterName, baseUrl = null) {
   const response = await fetch(imageUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; MonsterCardImageProxy/1.0)',
@@ -93,7 +98,7 @@ async function downloadAndSaveImage(r2Bucket, imageUrl, monsterName) {
                      contentType.includes('jpeg') || contentType.includes('jpg') ? 'jpg' : 'png';
   
   const arrayBuffer = await response.arrayBuffer();
-  return await saveImageToR2(r2Bucket, arrayBuffer, monsterName, extension);
+  return await saveImageToR2(r2Bucket, arrayBuffer, monsterName, extension, baseUrl);
 }
 
 // Load image map from KV
@@ -122,6 +127,8 @@ async function saveImageMap(kv, imageMap) {
 async function generateMonsterImage(monsterName, env) {
   const apiKey = env.OPENAI_API_KEY;
   
+  console.log('OpenAI API key present:', !!apiKey);
+  
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY is not set in environment variables');
   }
@@ -129,6 +136,7 @@ async function generateMonsterImage(monsterName, env) {
   const sanitizedName = sanitizeMonsterNameForPrompt(monsterName);
   const prompt = `Illustration semi‑réaliste d'un ${sanitizedName}, portrait vertical en pied : la créature est entièrement visible de la tête aux pieds, dans une pose dynamique, et remplit la hauteur de l'image. La lumière est douce et elle projette une ombre subtile sur un fond blanc uni. AUCUN texte, AUCUNE palette de couleurs, AUCUNE bordure, logo ou élément graphique supplémentaire : uniquement la créature sur fond blanc. Utiliser des couleurs naturelles et un rendu détaillé, sans décor ni ornement.`;
 
+  console.log('Fetching from OpenAI API...');
   const response = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: {
@@ -143,6 +151,8 @@ async function generateMonsterImage(monsterName, env) {
       quality: 'standard',
     }),
   });
+  
+  console.log('OpenAI response status:', response.status, response.statusText);
 
   if (!response.ok) {
     // Check content type before parsing
@@ -332,6 +342,143 @@ async function getEvents(kv, limit = 100, eventType = null) {
   return events.slice(0, limit);
 }
 
+// Convert database row to Monster object
+function rowToMonster(row) {
+  return {
+    slug: row.slug,
+    name: row.name,
+    size: row.size,
+    type: row.type,
+    subtype: row.subtype,
+    alignment: row.alignment,
+    armor_class: row.armor_class,
+    armor_desc: row.armor_desc,
+    hit_points: row.hit_points,
+    hit_dice: row.hit_dice,
+    speed: {
+      walk: row.speed_walk || undefined,
+      fly: row.speed_fly || undefined,
+      swim: row.speed_swim || undefined,
+      burrow: row.speed_burrow || undefined,
+      climb: row.speed_climb || undefined,
+    },
+    strength: row.strength,
+    dexterity: row.dexterity,
+    constitution: row.constitution,
+    intelligence: row.intelligence,
+    wisdom: row.wisdom,
+    charisma: row.charisma,
+    strength_save: row.strength_save,
+    dexterity_save: row.dexterity_save,
+    constitution_save: row.constitution_save,
+    intelligence_save: row.intelligence_save,
+    wisdom_save: row.wisdom_save,
+    charisma_save: row.charisma_save,
+    perception: row.perception,
+    skills: row.skills ? JSON.parse(row.skills) : {},
+    damage_vulnerabilities: row.damage_vulnerabilities,
+    damage_resistances: row.damage_resistances,
+    damage_immunities: row.damage_immunities,
+    condition_immunities: row.condition_immunities,
+    senses: row.senses,
+    languages: row.languages,
+    challenge_rating: row.challenge_rating,
+    cr: row.cr,
+    actions: row.actions ? JSON.parse(row.actions) : [],
+    bonus_actions: row.bonus_actions ? JSON.parse(row.bonus_actions) : [],
+    reactions: row.reactions ? JSON.parse(row.reactions) : [],
+    legendary_desc: row.legendary_desc,
+    legendary_actions: row.legendary_actions ? JSON.parse(row.legendary_actions) : [],
+    special_abilities: row.special_abilities ? JSON.parse(row.special_abilities) : [],
+    spell_list: row.spell_list ? JSON.parse(row.spell_list) : [],
+    img_main: row.img_main,
+    document__slug: row.document_slug,
+    document__title: row.document_title,
+  };
+}
+
+// Search monsters in D1
+async function searchMonstersInD1(db, query, limit = 500) {
+  try {
+    let stmt;
+    
+    if (!query || query.trim() === '') {
+      // Get all monsters
+      stmt = db.prepare(`
+        SELECT * FROM monsters 
+        ORDER BY name ASC 
+        LIMIT ?
+      `);
+      stmt = stmt.bind(limit);
+    } else {
+      // Search using FTS5 or LIKE fallback
+      const searchQuery = query.trim();
+      
+      // Try FTS5 first, fallback to LIKE if it fails
+      try {
+        // FTS5 query - search across name, type, subtype, alignment
+        const ftsQuery = searchQuery.split(/\s+/).map(term => `"${term}"`).join(' OR ');
+        stmt = db.prepare(`
+          SELECT m.* FROM monsters m
+          JOIN monsters_fts fts ON m.slug = fts.slug
+          WHERE monsters_fts MATCH ?
+          ORDER BY m.name ASC
+          LIMIT ?
+        `);
+        stmt = stmt.bind(ftsQuery, limit);
+      } catch (ftsError) {
+        // Fallback to LIKE search if FTS fails
+        console.warn('FTS search failed, using LIKE fallback:', ftsError);
+        const likeQuery = `%${searchQuery}%`;
+        stmt = db.prepare(`
+          SELECT * FROM monsters
+          WHERE name LIKE ? OR type LIKE ? OR subtype LIKE ? OR alignment LIKE ?
+          ORDER BY name ASC
+          LIMIT ?
+        `);
+        stmt = stmt.bind(likeQuery, likeQuery, likeQuery, likeQuery, limit);
+      }
+    }
+    
+    const result = await stmt.all();
+    return result.results.map(rowToMonster);
+  } catch (error) {
+    console.error('Error searching monsters:', error);
+    // Fallback to simple LIKE search
+    try {
+      const likeQuery = `%${query}%`;
+      const stmt = db.prepare(`
+        SELECT * FROM monsters
+        WHERE name LIKE ? OR type LIKE ? OR subtype LIKE ?
+        ORDER BY name ASC
+        LIMIT ?
+      `);
+      const result = await stmt.bind(likeQuery, likeQuery, likeQuery, limit).all();
+      return result.results.map(rowToMonster);
+    } catch (fallbackError) {
+      console.error('Fallback search also failed:', fallbackError);
+      throw error;
+    }
+  }
+}
+
+// Get single monster by slug
+async function getMonsterBySlug(db, slug) {
+  try {
+    const stmt = db.prepare('SELECT * FROM monsters WHERE slug = ?');
+    const result = await stmt.bind(slug).first();
+    
+    if (!result) {
+      return null;
+    }
+    
+    return rowToMonster(result);
+  } catch (error) {
+    console.error('Error getting monster:', error);
+    throw error;
+  }
+}
+
 // CORS headers
 function corsHeaders(origin) {
   return {
@@ -347,6 +494,9 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin') || '*';
+    
+    // Log all requests
+    console.log(`[${new Date().toISOString()}] ${request.method} ${url.pathname}`);
     
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
@@ -367,6 +517,72 @@ export default {
           ...corsHeaders(origin),
         },
       });
+    }
+    
+    // Monster endpoints
+    if (url.pathname === '/api/monsters' && request.method === 'GET') {
+      try {
+        if (!env.MONSTERS_DB) {
+          return new Response(JSON.stringify({ error: 'Database not configured' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+          });
+        }
+        
+        const query = url.searchParams.get('search') || '';
+        const limit = parseInt(url.searchParams.get('limit') || '500', 10);
+        
+        const monsters = await searchMonstersInD1(env.MONSTERS_DB, query, limit);
+        
+        return new Response(JSON.stringify(monsters), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        });
+      } catch (error) {
+        console.error('Error fetching monsters:', error);
+        return new Response(JSON.stringify({ 
+          error: 'Failed to fetch monsters',
+          message: error.message 
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        });
+      }
+    }
+    
+    // Get single monster by slug
+    const monsterSlugMatch = url.pathname.match(/^\/api\/monsters\/([^\/]+)$/);
+    if (monsterSlugMatch && request.method === 'GET') {
+      try {
+        if (!env.MONSTERS_DB) {
+          return new Response(JSON.stringify({ error: 'Database not configured' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+          });
+        }
+        
+        const slug = monsterSlugMatch[1];
+        const monster = await getMonsterBySlug(env.MONSTERS_DB, slug);
+        
+        if (!monster) {
+          return new Response(JSON.stringify({ error: 'Monster not found' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+          });
+        }
+        
+        return new Response(JSON.stringify(monster), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        });
+      } catch (error) {
+        console.error('Error fetching monster:', error);
+        return new Response(JSON.stringify({ 
+          error: 'Failed to fetch monster',
+          message: error.message 
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        });
+      }
     }
     
     // Analytics endpoints
@@ -441,7 +657,9 @@ export default {
     // Generate monster image
     if (url.pathname === '/api/generate-monster-image' && request.method === 'POST') {
       try {
+        console.log('Generating monster image - request received');
         const { monsterName } = await request.json();
+        console.log('Monster name:', monsterName);
         
         if (!monsterName) {
           return new Response(JSON.stringify({ error: 'monsterName is required' }), {
@@ -450,8 +668,13 @@ export default {
           });
         }
         
+        // Get worker base URL from request
+        const workerBaseUrl = `${url.protocol}//${url.host}`;
+        
         const normalizedName = normalizeMonsterName(monsterName);
+        console.log('Normalized name:', normalizedName);
         const imageMap = await loadImageMap(env.ANALYTICS_KV);
+        console.log('Image map loaded, checking cache...');
         
         // Check if image exists
         const variations = [
@@ -462,8 +685,13 @@ export default {
         
         for (const variation of variations) {
           if (imageMap[variation]) {
+            // Convert cached URL to absolute if it's relative
+            let cachedUrl = imageMap[variation];
+            if (cachedUrl && cachedUrl.startsWith('/')) {
+              cachedUrl = `${workerBaseUrl}${cachedUrl}`;
+            }
             return new Response(JSON.stringify({ 
-              url: imageMap[variation],
+              url: cachedUrl,
               cached: true 
             }), {
               headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
@@ -489,7 +717,9 @@ export default {
         // Generate image
         const generationPromise = (async () => {
           try {
+            console.log('Calling OpenAI API...');
             const imageResult = await generateMonsterImage(monsterName, env);
+            console.log('OpenAI response received, type:', imageResult?.type);
             
             if (!imageResult) {
               throw new Error('Failed to generate image');
@@ -502,20 +732,25 @@ export default {
                 env.IMAGES_R2,
                 imageResult.data,
                 normalizedName,
-                imageResult.extension
+                imageResult.extension,
+                workerBaseUrl
               );
             } else if (imageResult.type === 'url') {
               localPath = await downloadAndSaveImage(
                 env.IMAGES_R2,
                 imageResult.url,
-                normalizedName
+                normalizedName,
+                workerBaseUrl
               );
             } else {
               throw new Error('Unknown image result type');
             }
             
-            // Save to image map
-            imageMap[normalizedName] = localPath;
+            // Save relative path to image map (for portability)
+            const relativePath = localPath.startsWith('http') 
+              ? localPath.replace(workerBaseUrl, '')
+              : localPath;
+            imageMap[normalizedName] = relativePath;
             await saveImageMap(env.ANALYTICS_KV, imageMap);
             
             return localPath;
@@ -556,6 +791,9 @@ export default {
           });
         }
         
+        // Get worker base URL from request
+        const workerBaseUrl = `${url.protocol}//${url.host}`;
+        
         const normalizedName = normalizeMonsterName(monsterName);
         const regenerateKey = `regenerate:${normalizedName}`;
         
@@ -591,13 +829,15 @@ export default {
                 env.IMAGES_R2,
                 imageResult.data,
                 normalizedName,
-                imageResult.extension
+                imageResult.extension,
+                workerBaseUrl
               );
             } else if (imageResult.type === 'url') {
               localPath = await downloadAndSaveImage(
                 env.IMAGES_R2,
                 imageResult.url,
-                normalizedName
+                normalizedName,
+                workerBaseUrl
               );
             } else {
               throw new Error('Unknown image result type');
@@ -641,16 +881,26 @@ export default {
           });
         }
         
+        // Get worker base URL from request
+        const workerBaseUrl = `${url.protocol}//${url.host}`;
+        
         const normalizedName = normalizeMonsterName(monsterName);
         const imageMap = await loadImageMap(env.ANALYTICS_KV);
         
         let localPath = imageUrl;
         
         if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-          localPath = await downloadAndSaveImage(env.IMAGES_R2, imageUrl, normalizedName);
+          localPath = await downloadAndSaveImage(env.IMAGES_R2, imageUrl, normalizedName, workerBaseUrl);
+        } else if (localPath.startsWith('/')) {
+          // If it's already a relative path, convert to absolute for response
+          localPath = `${workerBaseUrl}${localPath}`;
         }
         
-        imageMap[normalizedName] = localPath;
+        // Save relative path to image map (for portability)
+        const relativePath = localPath.startsWith('http') 
+          ? localPath.replace(workerBaseUrl, '')
+          : localPath;
+        imageMap[normalizedName] = relativePath;
         await saveImageMap(env.ANALYTICS_KV, imageMap);
         
         return new Response(JSON.stringify({ success: true, path: localPath }), {

@@ -1,6 +1,6 @@
 import { Monster, MonsterSearchResult } from "@/types/monster";
+import { apiUrl } from "./api-config";
 
-const API_BASE = "https://api.open5e.com/v1";
 const MONSTERS_CACHE_KEY = "dnd_monsters_cache";
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
@@ -9,22 +9,52 @@ interface MonstersCache {
   timestamp: number;
 }
 
+/**
+ * Search monsters from the worker API (which uses D1 database)
+ * Falls back to localStorage cache if API is unavailable
+ */
 export async function searchMonsters(query: string): Promise<Monster[]> {
-  // If query is empty, fetch all monsters with pagination
-  if (!query.trim()) {
-    return getAllMonsters();
+  try {
+    // Try to fetch from worker API
+    const apiBase = apiUrl('/api/monsters');
+    const searchParam = query.trim() ? `?search=${encodeURIComponent(query)}&limit=500` : '?limit=500';
+    const response = await fetch(`${apiBase}${searchParam}`, {
+      signal: AbortSignal.timeout(30000),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch monsters: ${response.status} ${response.statusText}`);
+    }
+    
+    const monsters: Monster[] = await response.json();
+    
+    // Cache the results
+    if (monsters.length > 0) {
+      saveMonstersToCache(monsters);
+    }
+    
+    return monsters;
+  } catch (error) {
+    console.error("Error fetching from worker API, trying cache:", error);
+    
+    // Fallback to cache
+    const cached = getCachedMonsters();
+    if (cached) {
+      // Filter cached results if there's a query
+      if (query.trim()) {
+        const queryLower = query.toLowerCase();
+        return cached.filter(m => 
+          m.name.toLowerCase().includes(queryLower) ||
+          m.type?.toLowerCase().includes(queryLower) ||
+          m.subtype?.toLowerCase().includes(queryLower)
+        );
+      }
+      return cached;
+    }
+    
+    // If no cache and API failed, throw the error
+    throw error;
   }
-  
-  const response = await fetch(
-    `${API_BASE}/monsters/?search=${encodeURIComponent(query)}&limit=500`
-  );
-  
-  if (!response.ok) {
-    throw new Error("Failed to fetch monsters");
-  }
-  
-  const data: MonsterSearchResult = await response.json();
-  return data.results;
 }
 
 /**
@@ -78,143 +108,24 @@ function saveMonstersToCache(monsters: Monster[]): void {
 }
 
 /**
- * Fetch remaining monsters in the background and update cache
+ * Get a single monster by slug from the worker API
  */
-async function fetchRemainingMonstersInBackground(startUrl: string): Promise<void> {
-  const allMonsters: Monster[] = [];
-  let nextUrl: string | null = startUrl;
-  const visitedUrls = new Set<string>();
-  let pageCount = 0;
-  const maxPages = 50;
-  
+export async function getMonster(slug: string): Promise<Monster> {
   try {
-    while (nextUrl && pageCount < maxPages) {
-      if (visitedUrls.has(nextUrl)) {
-        console.warn("Detected loop in pagination, stopping");
-        break;
-      }
-      visitedUrls.add(nextUrl);
-      pageCount++;
-      
-      const response = await fetch(nextUrl, {
-        signal: AbortSignal.timeout(30000),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch monsters: ${response.status} ${response.statusText}`);
-      }
-      
-      const data: MonsterSearchResult = await response.json();
-      
-      if (!data.results || data.results.length === 0) {
-        break;
-      }
-      
-      allMonsters.push(...data.results);
-      
-      if (data.next) {
-        if (data.next.startsWith('http')) {
-          nextUrl = data.next;
-        } else if (data.next.startsWith('/')) {
-          nextUrl = `https://api.open5e.com${data.next}`;
-        } else {
-          nextUrl = `${API_BASE}/${data.next}`;
-        }
-      } else {
-        nextUrl = null;
-      }
-      
-      if (allMonsters.length > 10000) {
-        console.warn("Reached safety limit of 10000 monsters");
-        break;
-      }
-    }
-    
-    if (allMonsters.length > 0) {
-      // Get existing cache and merge
-      const existingCache = getCachedMonsters() || [];
-      const combined = [...existingCache, ...allMonsters];
-      const sorted = combined.sort((a, b) => a.name.localeCompare(b.name));
-      saveMonstersToCache(sorted);
-      console.log(`Background fetch complete: ${sorted.length} total monsters cached`);
-    }
-  } catch (error) {
-    console.error("Error in background fetch:", error);
-    // Silently fail - we already have the first page
-  }
-}
-
-/**
- * Fetch all monsters from Open5e API with pagination
- * Returns first page immediately, loads rest in background
- */
-async function getAllMonsters(): Promise<Monster[]> {
-  // Check cache first
-  const cached = getCachedMonsters();
-  if (cached) {
-    console.log(`Using cached monsters (${cached.length} monsters)`);
-    return cached;
-  }
-  
-  console.log("Fetching first page of monsters...");
-  
-  try {
-    // Fetch first page immediately
-    const firstPageUrl = `${API_BASE}/monsters/?limit=500`;
-    const response = await fetch(firstPageUrl, {
+    const apiBase = apiUrl(`/api/monsters/${slug}`);
+    const response = await fetch(apiBase, {
       signal: AbortSignal.timeout(30000),
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch monsters: ${response.status} ${response.statusText}`);
+      throw new Error(`Failed to fetch monster: ${response.status} ${response.statusText}`);
     }
     
-    const data: MonsterSearchResult = await response.json();
-    
-    if (!data.results || data.results.length === 0) {
-      console.warn("No monsters in first page");
-      return [];
-    }
-    
-    // Sort and return first page immediately
-    const firstPageMonsters = data.results.sort((a, b) => a.name.localeCompare(b.name));
-    console.log(`Returning first ${firstPageMonsters.length} monsters immediately`);
-    
-    // Cache first page immediately so it's available
-    saveMonstersToCache(firstPageMonsters);
-    
-    // Start background fetch for remaining pages if there are more
-    if (data.next) {
-      let nextUrl: string;
-      if (data.next.startsWith('http')) {
-        nextUrl = data.next;
-      } else if (data.next.startsWith('/')) {
-        nextUrl = `https://api.open5e.com${data.next}`;
-      } else {
-        nextUrl = `${API_BASE}/${data.next}`;
-      }
-      
-      // Fetch remaining pages in background (don't await)
-      fetchRemainingMonstersInBackground(nextUrl).catch(err => {
-        console.error("Background fetch failed:", err);
-      });
-    }
-    
-    return firstPageMonsters;
+    return response.json();
   } catch (error) {
-    console.error("Error fetching first page of monsters:", error);
-    return [];
+    console.error("Error fetching monster from worker API:", error);
+    throw error;
   }
-}
-
-export async function getMonster(slug: string): Promise<Monster> {
-  const response = await fetch(`${API_BASE}/monsters/${slug}/`);
-  
-  if (!response.ok) {
-    throw new Error("Failed to fetch monster");
-  }
-  
-  return response.json();
 }
 
 export function getModifier(score: number): string {

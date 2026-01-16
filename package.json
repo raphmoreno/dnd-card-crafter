@@ -17,7 +17,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "scrape-images": "node scripts/scrape-monster-images.js",
-    "migrate-images": "node scripts/migrate-images-to-local.js"
+    "migrate-images": "node scripts/migrate-images-to-local.js",
+    "db:setup": "wrangler d1 execute monsters-db --remote --file=./cloudflare/schema.sql",
+    "db:setup:local": "wrangler d1 execute monsters-db --local --file=./cloudflare/schema.sql",
+    "db:populate": "node scripts/populate-d1-database.js",
+    "db:populate:local": "node scripts/populate-d1-database.js --local"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
