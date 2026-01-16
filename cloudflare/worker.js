@@ -134,7 +134,8 @@ async function generateMonsterImage(monsterName, env) {
   }
 
   const sanitizedName = sanitizeMonsterNameForPrompt(monsterName);
-  const prompt = `Illustration semi‑réaliste d'un ${sanitizedName}, portrait vertical en pied : la créature est entièrement visible de la tête aux pieds, dans une pose dynamique, et remplit la hauteur de l'image. La lumière est douce et elle projette une ombre subtile sur un fond blanc uni. AUCUN texte, AUCUNE palette de couleurs, AUCUNE bordure, logo ou élément graphique supplémentaire : uniquement la créature sur fond blanc. Utiliser des couleurs naturelles et un rendu détaillé, sans décor ni ornement.`;
+  // Prompt optimized for vertical portrait orientation to fit the card's top section
+  const prompt = `Illustration semi‑réaliste d'un ${sanitizedName}, portrait vertical : la créature est entièrement visible, dans une pose dynamique, et remplit la hauteur de l'image. La lumière est douce et elle projette une ombre subtile sur un fond blanc uni. AUCUN texte, AUCUNE palette de couleurs, AUCUNE bordure, logo ou élément graphique supplémentaire : uniquement la créature sur fond blanc. Utiliser des couleurs naturelles et un rendu détaillé, sans décor ni ornement.`;
 
   console.log('Fetching from OpenAI API...');
   const response = await fetch('https://api.openai.com/v1/images/generations', {
@@ -144,11 +145,11 @@ async function generateMonsterImage(monsterName, env) {
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'dall-e-3',
+      model: 'gpt-image-1-mini',
       prompt: prompt,
       n: 1,
-      size: '1024x1024',
-      quality: 'standard',
+      size: '1024x1536', // Vertical portrait format (approximately 2:3.5 ratio) to match card dimensions
+      quality: 'auto',
     }),
   });
   

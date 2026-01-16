@@ -94,10 +94,12 @@ D&D Card Crafter is a powerful tool for Dungeon Masters and players to create pr
 - **React Router** - Client-side routing
 - **Sonner** - Toast notifications
 
-### Backend
-- **Express.js** - Node.js web framework
-- **OpenAI API** - DALL-E 3 for image generation
-- **File System** - Local image storage and analytics
+### Backend (Cloudflare)
+- **Cloudflare Workers** - Serverless API functions
+- **Cloudflare R2** - Object storage for images
+- **Cloudflare KV** - Key-value store for analytics
+- **Cloudflare D1** - SQL database for monster data
+- **OpenAI API** - GPT Image model for image generation
 
 ### PDF Generation
 - **jsPDF** - PDF generation library
@@ -120,23 +122,15 @@ cd <YOUR_PROJECT_NAME>
 # Step 2: Install dependencies
 npm install
 
-# Step 3: Set up environment variables
-# Create a .env file in the project root:
-OPENAI_API_KEY=your_openai_api_key_here
-API_PORT=3001
-NODE_ENV=development
-
-# Step 4: Start the development servers
-# Option A: Start both frontend and API server together
-npm run dev:all
-
-# Option B: Start them separately (in two terminals)
-# Terminal 1: Frontend (default: http://localhost:5173)
+# Step 3: Start the development server
 npm run dev
 
-# Terminal 2: API server (default: http://localhost:3001)
-npm run dev:api
+# The frontend will run on http://localhost:5173
+# Make sure to configure VITE_API_URL to point to your Cloudflare Worker
+# See DEPLOYMENT.md for full setup instructions
 ```
+
+For production deployment to Cloudflare, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ## 🎮 Usage Guide
 
@@ -175,21 +169,18 @@ npm run dev:api
 ```sh
 # Development
 npm run dev              # Start frontend dev server
-npm run dev:api          # Start API server
-npm run dev:all          # Start both servers concurrently
 
 # Production
 npm run build            # Build for production
 npm run build:prod       # Build with production optimizations
 npm run preview          # Preview production build
 
-# Image Management
-npm run scrape-images    # Scrape monster images from Forgotten Realms Wiki
-npm run migrate-images   # Migrate images to local storage
+# Database (Cloudflare D1)
+npm run db:setup         # Create database schema (remote)
+npm run db:setup:local   # Create database schema (local)
 
-# Production Server
-npm start                # Start production server
-npm run start:pm2        # Start with PM2 process manager
+# Deployment
+npm run deploy           # Build and deploy to Cloudflare Pages
 
 # Code Quality
 npm run lint             # Run ESLint
@@ -199,13 +190,9 @@ npm run lint             # Run ESLint
 
 ```
 dnd-card-crafter/
-├── public/
-│   ├── images/
-│   │   └── monsters/    # Local monster images
-│   └── ...
-├── server/
-│   ├── api.js           # Express API server
-│   └── analytics.js     # Analytics service
+├── cloudflare/
+│   ├── worker.js        # Cloudflare Worker (API)
+│   └── schema.sql       # D1 database schema
 ├── src/
 │   ├── components/      # React components
 │   │   ├── ui/          # shadcn-ui components
@@ -224,68 +211,75 @@ dnd-card-crafter/
 │   │   └── analytics.ts
 │   ├── pages/           # Page components
 │   └── types/           # TypeScript types
-├── scripts/             # Utility scripts
-├── data/                # Data files (analytics, etc.)
+├── wrangler.toml        # Cloudflare Workers configuration
 └── ...
 ```
 
 ## 🖼️ Image Sources
 
-Monster images are sourced from two places:
+Monster images are generated and stored in Cloudflare R2:
 
-1. **Local Database**: Pre-scraped official Monster Manual 5e images from Forgotten Realms Wiki
-   - Over 300 monsters included
-   - Run `npm run scrape-images` to update the database
-
-2. **AI Generation**: OpenAI DALL-E 3 generates images for:
-   - Monsters not in the local database
+1. **AI Generation**: OpenAI GPT Image model generates images for:
+   - All monsters (on-demand)
    - Custom monsters
    - On-demand regeneration requests
+   - Images are cached in R2 for fast access
+
+2. **Image Storage**: All images are stored in Cloudflare R2 and served through the Worker
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+For local development, create a `.env.local` file:
 
 ```env
-# OpenAI API (required for image generation)
-OPENAI_API_KEY=your_api_key_here
-
-# Server Configuration
-API_PORT=3001
-NODE_ENV=development
-
-# Frontend URL (for CORS in production)
-FRONTEND_URL=http://localhost:5173
+# API URL pointing to your Cloudflare Worker
+VITE_API_URL=https://your-worker.workers.dev
 
 # Analytics (optional)
-ANALYTICS_ENABLED=true
+VITE_ANALYTICS_ENABLED=true
 ```
+
+For production deployment, configure these in Cloudflare:
+- **Worker**: Set `OPENAI_API_KEY` via `wrangler secret put OPENAI_API_KEY`
+- **Pages**: Set `VITE_API_URL` and `VITE_ANALYTICS_ENABLED` in Pages settings
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for full configuration details.
 
 ## 🚀 Deployment
 
 For detailed deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
-Quick deployment steps:
-1. Set up production environment variables
-2. Build the application: `npm run build`
-3. Start the server: `npm start` or use PM2: `npm run start:pm2`
-4. Configure Nginx as reverse proxy (see `nginx.conf.example`)
+The application is designed to run on Cloudflare:
+- **Frontend**: Deployed to Cloudflare Pages
+- **API**: Deployed to Cloudflare Workers
+- **Images**: Stored in Cloudflare R2
+- **Data**: Stored in Cloudflare D1 and KV
 
-## 📊 Analytics API
+## 📊 API Endpoints
 
-Access analytics data via REST endpoints:
+All endpoints are available through the Cloudflare Worker:
 
 ```bash
-# Get summary (last 30 days)
-GET /api/analytics/summary?days=30
-
-# Get recent events
-GET /api/analytics/events?limit=50
-
 # Health check
 GET /api/health
+
+# Monster search
+GET /api/monsters?search=goblin&limit=500
+
+# Get single monster
+GET /api/monsters/:slug
+
+# Generate monster image
+POST /api/generate-monster-image
+Body: { "monsterName": "goblin" }
+
+# Analytics summary
+GET /api/analytics/summary?days=30
+
+# Analytics events
+GET /api/analytics/events?limit=50
 ```
 
 ## 🤝 Contributing
